@@ -60,7 +60,6 @@ public class FastBlur implements LightBlur {
 
     @Override
     public void recycle() {
-
     }
 
     /**

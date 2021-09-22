@@ -5,7 +5,6 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.PaintFlagsDrawFilter;
 import android.graphics.Rect;
-import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 
@@ -15,8 +14,6 @@ import android.widget.ImageView;
  * @date 2021-09-21
  */
 public class BitmapProcessor {
-
-//    private static BitmapProcessor INSTANCE = null;
 
     private boolean mRealTimeMode = false;
 
@@ -174,8 +171,6 @@ public class BitmapProcessor {
         return output;
     }
 
-    private static class StopDrawException extends Exception {
-    }
 
     Bitmap scaleBitmap(Bitmap bitmap, float scale) {
         return scaleBitmap(bitmap, scale, true);
@@ -194,7 +189,6 @@ public class BitmapProcessor {
     }
 
     Bitmap scaleBitmap(Bitmap bitmap, int w, int h, boolean antiAlias) {
-        Log.e(" ddf ", w + "  " + h);
         final Bitmap.Config config = bitmap.getConfig();
         final Bitmap.Config newConfig;
         switch (config) {

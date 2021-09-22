@@ -11,8 +11,11 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -38,6 +41,10 @@ public class MainActivity extends AppCompatActivity {
     private Bitmap mBitmapOriginal;
     private Bitmap mBitmapBlurred;
 
+    private BitmapBlurWrapper mBlurred = null;
+
+    private long start = 0;
+
     /**
      * 选择的图片集
      */
@@ -55,6 +62,27 @@ public class MainActivity extends AppCompatActivity {
                 Manifest.permission.READ_EXTERNAL_STORAGE)) {
             preLoadAlbums();
         }
+
+        mBlurred = new BitmapBlurWrapper(MainActivity.this)
+                .bitmap(mBitmapOriginal)
+                .staySize(cb_keep_size.isChecked())
+                .recycleOriginal(false)
+                .listenBlurTime(new BitmapBlurWrapper.Listener() {
+                    @Override
+                    public void begin() {
+                        start = System.currentTimeMillis();
+                    }
+
+                    @Override
+                    public void end() {
+                        long end = System.currentTimeMillis();
+                        long off = end - start;
+                        setInfo(true, off);
+                    }
+                })
+                .scale(1f / sb_scale.getProgress())
+                .radius(sb_radius.getProgress());
+
     }
 
     private void initView() {
@@ -72,11 +100,20 @@ public class MainActivity extends AppCompatActivity {
         cb_keep_size = findViewById(R.id.cb_keep_size); //保持尺寸
         cb_real_time = findViewById(R.id.cb_real_time);//实时模糊
 
+        cb_keep_size.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                mBlurred.staySize(isChecked);
+            }
+        });
+
+
         sb_radius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 tv_radius.setText("" + progress);
                 if (cb_real_time.isChecked()) {
+                    mBlurred.radius(sb_radius.getProgress());
                     blurAndUpdateView();
                 }
             }
@@ -96,6 +133,7 @@ public class MainActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 tv_scale.setText("" + progress);
                 if (cb_real_time.isChecked()) {
+                    mBlurred.scale(1f / sb_scale.getProgress());
                     blurAndUpdateView();
                 }
             }
@@ -132,70 +170,56 @@ public class MainActivity extends AppCompatActivity {
                 case R.id.iv_blurred:
                     blurAndUpdateView();
                     break;
-
             }
-
         }
     }
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_main, menu);
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_real_time_blur) {
+            startActivity(new Intent(this, ViewBgBlurActivity.class));
+        }
+        return true;
+    }
+
+
     private void blurAndUpdateView() {
         if (mBitmapOriginal == null) return;
-        refreshBlur();
-        long end = System.currentTimeMillis();
-        long off = end - start;
-        if (off <= 16) {
-            tv_blurred.setBackgroundColor(color1);
-        } else {
-            tv_blurred.setBackgroundColor(color2);
-        }
+        mBlurred.doBlur(new BitmapBlurWrapper.Callback() {
+            @Override
+            public void down(Bitmap bitmap) {
+                mBitmapBlurred = bitmap;
+            }
+        });
         if (mBitmapBlurred != null) {
             iv_blurred.setImageBitmap(mBitmapBlurred);
         }
     }
 
-    private BitmapBlurWrapper mBlurred = null;
-    private long start = 0;
-
-    private void refreshBlur() {
-        if (mBlurred == null) {
-            mBlurred = new BitmapBlurWrapper(MainActivity.this);
-        }
-        mBitmapBlurred = mBlurred.bitmap(mBitmapOriginal)
-                .staySize(cb_keep_size.isChecked())
-                .recycleOriginal(false)
-                .listenBlurTime(new BitmapBlurWrapper.Listener() {
-                    @Override
-                    public void begin() {
-                        start = System.currentTimeMillis();
-                    }
-
-                    @Override
-                    public void end() {
-                        long end = System.currentTimeMillis();
-                        long off = end - start;
-                        setInfo(true,off);
-                    }
-                })
-                .scale(1f / sb_scale.getProgress())
-                .radius(sb_radius.getProgress())
-                .blur();
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mBlurred.recycler();
     }
-
-
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (RESULT_OK == resultCode) {
             if (requestCode == 101) {
-                //返回对象集合：如果你需要了解图片的宽、高、大小、用户是否选中原图选项等信息，可以用这个
                 selectedPhotoList =
                         data.getParcelableArrayListExtra(EasyPhotos.RESULT_PHOTOS);
                 if (selectedPhotoList != null && selectedPhotoList.size() > 0) {
-                    //将图片转成 位图
                     mBitmapOriginal = BitmapFactory.decodeFile(selectedPhotoList.get(0).path);
                     iv_original.setImageBitmap(mBitmapOriginal);
                     iv_blurred.setImageDrawable(new ColorDrawable(Color.TRANSPARENT));
+                    mBlurred.bitmap(mBitmapOriginal);
                     setInfo(false, 0);
                 }
             }
@@ -203,6 +227,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setInfo(boolean isBlurred, long time) {
+        if (time <= 16) {
+            tv_blurred.setBackgroundColor(color1);
+        } else {
+            tv_blurred.setBackgroundColor(color2);
+        }
         Bitmap bitmap;
         TextView textView;
         if (isBlurred) {
@@ -224,10 +253,6 @@ public class MainActivity extends AppCompatActivity {
         textView.setText(info);
     }
 
-    /**
-     * 预加载相册扫描，可以增加点速度，写不写都行
-     * 该方法如果没有授权读取权限的话，是无效的，所以外部加不加权限控制都可以，加的话保证执行，不加也不影响程序正常使用。
-     */
     private void preLoadAlbums() {
         EasyPhotos.preLoad(this);
     }
